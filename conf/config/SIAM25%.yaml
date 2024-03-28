@@ -1,5 +1,8 @@
-name: "unet"
-network: "unet"
+swap_size: 30,30,1
+swap_iterations: 10
+extension: ".mhd"
+name: "siam25"
+network: "SIAMUNet"
 #* Output Settings
 output_dir: './logs/${config.name}'  # checkpoint_latest save path
 save_suffix: '.mhd'  # the file format saved when training
@@ -7,10 +10,11 @@ save_suffix: '.mhd'  # the file format saved when training
 in_classes: 1
 out_classes: 1
 load_mode: 0  # 0: load nothing 1: load from checkpoint 2: load from pre_trained model(supervised)
-ckpt: None
+ckpt: '/disk/cyq/2023/SIM-Space-and-Intensity-Module-/logs/same_as_smbr/2024-01-10/16-27-30'
 latest_checkpoint_file: 'latest_checkpoint.pt'  # ckpt + latest_checkpoint_file determined load which ckpt file
 #* Training Settings
 crop_or_pad_size: 64, 64, 64  # if 2D: 256,256,1  #USELESS
 patch_size: 64, 64, 64  # if 2D: 128,128,1
-dataset_ratio: 1
+dataset_ratio: 0.25
+
 

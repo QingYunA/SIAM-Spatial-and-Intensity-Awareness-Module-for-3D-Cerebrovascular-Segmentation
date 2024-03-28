@@ -1,20 +1,24 @@
 defaults:
   - _self_
-  - config: unet
+  - config: sim_module
 
 hydra:
   run:
-    dir: ${config.output_dir}/${now:%Y-%m-%d}/${now:%H-%M-%S}
-
+    dir: ${config.output_dir}/${hydra:job.name}-${now:%Y-%m-%d}/${now:%H-%M-%S}
 config:
-  data_path: '/nvme/tof_data/train/source/'
-  gt_path: '/nvme/tof_data/train/label1/'
-  pred_data_path: '/nvme/tof_data/test/source/'
-  pred_gt_path: '/nvme/tof_data/test/label1/'
+  # data_path: '/nvme/tof_data/train/source/'
+  # gt_path: '/nvme/tof_data/train/label1/'
+  # pred_data_path: '/nvme/tof_data/test/source/'
+  # pred_gt_path: '/nvme/tof_data/test/label1/'
+  dark_path: '/nvme/siam_data/IAM_data/'
+  data_path: '/nvme/siam_data/train/source'
+  gt_path: '/nvme/siam_data/train/label1'
+  pred_data_path: '/nvme/siam_data/test/source'
+  pred_gt_path: '/nvme/siam_data/test/label1'
   init_type: 'none'  # ['normal', 'xavier', 'xavier_uniform', 'kaiming', 'orthogonal', 'none]
   aug: False  # True or False
   epochs: 100
-  epochs_per_checkpoint: 25
+  epochs_per_checkpoint: 20
   batch_size: 4
   init_lr: 0.01
   scheduler_step_size: 20

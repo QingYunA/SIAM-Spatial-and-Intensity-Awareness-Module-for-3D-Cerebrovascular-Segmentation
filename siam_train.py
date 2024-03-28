@@ -9,12 +9,11 @@ from utils.metric import metric
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CosineAnnealingLR
 from process_input import process_x, process_gt
 
-# from logger import create_logger
 from timm.utils import AverageMeter
 from accelerate import Accelerator
+from monai.losses.dice import DiceLoss
+import torch.nn as nn
 
-# from utils import yaml_read
-# from utils.conf_base import Default_Conf
 from rich.progress import (
     BarColumn,
     Progress,
@@ -25,6 +24,7 @@ from rich.progress import (
 import logging
 from rich.logging import RichHandler
 import hydra
+from SIAM_dataloader import SIAMDataLoader
 
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # ! solve warning
 
@@ -78,7 +78,8 @@ def train(config, model, logger):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.enabled = config.cudnn_enabled
     torch.backends.cudnn.benchmark = config.cudnn_benchmark
-
+    # *  acceleretor create
+    accelerator = Accelerator()
     # * init averageMeter
     loss_meter = AverageMeter()
     dice_meter = AverageMeter()
@@ -95,13 +96,8 @@ def train(config, model, logger):
     # * set optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=config.init_lr)
 
-    # * set loss function
-    from loss_function import Binary_Loss, DiceLoss, cross_entropy_3D
-
-    criterion = Binary_Loss()
-    # dice_criterion = DiceLoss().cuda()
-
     # * set scheduler strategy
+
     if config.use_scheduler:
         scheduler = StepLR(optimizer, step_size=config.scheduler_step_size, gamma=config.scheduler_gamma)
 
@@ -121,7 +117,6 @@ def train(config, model, logger):
         if config.use_scheduler:
             scheduler.load_state_dict(ckpt["scheduler"])
         elapsed_epochs = ckpt["epoch"]
-        # elapsed_epochs = 0
     else:
         elapsed_epochs = 0
 
@@ -131,14 +126,13 @@ def train(config, model, logger):
     writer = SummaryWriter(config.hydra_path)
 
     # * load datasetBs
-    from dataloader import Dataset
 
-    train_dataset = Dataset(config)
+    train_dataset = SIAMDataLoader(config).queue_dataset
     #! in distributed training, the 'shuffle' must be false!
     train_loader = torch.utils.data.DataLoader(
-        dataset=train_dataset.queue_dataset,
+        dataset=train_dataset,
         batch_size=config.batch_size,
-        shuffle=False,
+        shuffle=True,
         num_workers=0,
         pin_memory=True,
         drop_last=True,
@@ -150,9 +144,12 @@ def train(config, model, logger):
     epoch_tqdm = progress.add_task(description="[red]epoch progress", total=epochs)
     batch_tqdm = progress.add_task(description="[blue]batch progress", total=len(train_loader))
 
-    accelerator = Accelerator()
     # * accelerate prepare
     train_loader, model, optimizer, scheduler = accelerator.prepare(train_loader, model, optimizer, scheduler)
+    dice_criterion = DiceLoss().to(accelerator.device)
+    bce_criterion = nn.BCEWithLogitsLoss().to(accelerator.device)
+    sptial_criterion = nn.MSELoss().to(accelerator.device)
+    intensity_criterion = nn.MSELoss().to(accelerator.device)
 
     progress.start()
     for epoch in range(1, epochs + 1):
@@ -172,26 +169,39 @@ def train(config, model, logger):
                 load_time = time.time() - load_start
                 optimizer.zero_grad()
 
-                x = process_x(config, batch)  # * from batch extract x:[bs,4 or 1,h,w,d]
-                gt = process_gt(config, batch)  # * from batch extract gt:[bs,4 or 1,h,w,d]
-                # gt_back = torch.zeros_like(gt)
-                # gt_back[gt == 0] = 1
-                # gt = torch.cat([gt_back, gt], dim=1)  # * [bs,2,h,w,d]
+                x = batch["source"]["data"]
+                spatial_x = batch["spatial_source"]["data"]
+                intensity_x = batch["intensity_source"]["data"]
+
+                gt = batch["gt"]["data"]
+                siam_gt = batch["siam_gt"]["data"]
 
                 x = x.type(torch.FloatTensor).to(accelerator.device)
+                spatial_x = spatial_x.type(torch.FloatTensor).to(accelerator.device)
+                intensity_x = intensity_x.type(torch.FloatTensor).to(accelerator.device)
                 gt = gt.type(torch.FloatTensor).to(accelerator.device)
+                siam_gt = siam_gt.type(torch.FloatTensor).to(accelerator.device)
 
-                pred = model(x)
+                pred, spatial_pred, intensity_pred = model(x, spatial_x, intensity_x)
 
-                # mask = pred.argmax(dim=1, keepdim=True)  # * [bs,1,h,w,d]
+                # pred_clone = torch.sigmoid(pred.clone())
+                # mask = pred_clone.argmax(dim=1, keepdim=True)  # * [bs,1,h,w,d]
 
                 # *  pred -> mask (0 or 1)
                 mask = torch.sigmoid(pred.clone())  # TODO should use softmax, because it returns two probability (sum = 1)
                 mask[mask > 0.5] = 1
                 mask[mask <= 0.5] = 0
+                # print("pred shape", pred.shape)
+                # print("gt shape", gt.shape)
+                # print(spatial_pred.shape)
+                # print(intensity_pred.shape)
+                # print(siam_gt.shape)
 
-                loss = criterion(pred, gt)
-                # loss.backward()
+                dice_loss = dice_criterion(pred, gt)
+                bce_loss = bce_criterion(pred, gt)
+                spatial_loss = sptial_criterion(spatial_pred, siam_gt)
+                intensity_loss = intensity_criterion(intensity_pred, siam_gt)
+                loss = bce_loss + dice_loss + 0.5 * spatial_loss + 0.5 * intensity_loss
                 accelerator.backward(loss)
                 progress.refresh()
 
@@ -202,10 +212,8 @@ def train(config, model, logger):
 
             # * calculate metrics
             # TODO use reduce to sum up all rank's calculation results
+            # _, dice = metric(gt.cpu().argmax(dim=1, keepdim=True), mask.cpu())
             _, _, dice, _ = metric(gt.cpu(), mask.cpu())
-            # dice = dist.all_reduce(dice, op=dist.ReduceOp.SUM) / dist.get_world_size()
-            # recall = dist.all_reduce(recall, op=dist.ReduceOp.SUM) / dist.get_world_size()
-            # specificity = dist.all_reduce(specificity, op=dist.ReduceOp.SUM) / dist.get_world_size()
 
             writer.add_scalar("Training/Loss", loss.item(), iteration)
             # writer.add_scalar('Training/recall', recall, iteration)
@@ -294,14 +302,6 @@ def train(config, model, logger):
 @hydra.main(config_path="conf", config_name="config", version_base="1.3")
 def main(config):
     config = config["config"]
-    if isinstance(config.patch_size, str):
-        assert (
-            len(config.patch_size.split(",")) <= 3
-        ), f'patch size can only be one str or three str but got {len(config.patch_size.split(","))}'
-        if len(config.patch_size.split(",")) == 3:
-            config.patch_size = tuple(map(int, config.patch_size.split(",")))
-        else:
-            config.patch_size = int(config.patch_size)
 
     # * model selection
     if config.network == "res_unet":
@@ -309,9 +309,9 @@ def main(config):
 
         model = UNet(in_channels=config.in_classes, n_classes=config.out_classes, base_n_filter=32)
     elif config.network == "unet":
-        from models.three_d.My_Unet import UNet  # * 3d unet
+        from models.three_d.unet3d import UNet3D  # * 3d unet
 
-        model = UNet(in_channels=config.in_classes, out_channels=config.out_classes, init_features=32)
+        model = UNet3D(in_channels=config.in_classes, out_channels=config.out_classes, init_features=32)
     elif config.network == "er_net":
         from models.three_d.ER_net import ER_Net
 
@@ -319,18 +319,16 @@ def main(config):
     elif config.network == "re_net":
         from models.three_d.RE_net import RE_Net
 
-        model = RE_Net(classes=config.in_classes, channels=config.out_classes)
-    elif config.network == "vnet":
-        from models.three_d.vnet3d import VNet
+        model = RE_Net(classes=config.out_classes, channels=config.in_classes)
+    elif config.network == "SIAMUNet":
+        from models.three_d.SIAM_Unet import SIAMUNet
 
-        model = VNet(in_channels=config.in_classes, classes=config.out_classes)
+        model = SIAMUNet(in_channels=config.in_classes, out_channels=config.out_classes, init_features=32)
 
     model.apply(weights_init_normal(config.init_type))
 
     # * create logger
     logger = get_logger(config)
-    # * print using model's name
-    logger.info(f"Using model: {model.__class__.__name__}")
     info = "\nParameter Settings:\n"
     for k, v in config.items():
         info += f"{k}: {v}\n"

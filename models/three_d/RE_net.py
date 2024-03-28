@@ -8,8 +8,8 @@ import torch.nn as nn
 from functools import partial
 
 import torch.nn.functional as F
-nonlinearity = partial(F.relu, inplace=True)
 
+nonlinearity = partial(F.relu, inplace=True)
 
 
 def downsample():
@@ -18,9 +18,6 @@ def downsample():
 
 def deconv(in_channels, out_channels):
     return nn.ConvTranspose3d(in_channels, out_channels, kernel_size=2, stride=2)
-
-
-
 
 
 def initialize_weights(*models):
@@ -38,9 +35,9 @@ def initialize_weights(*models):
 class ResEncoder(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ResEncoder, self).__init__()
-        self.conv1 = nn.Conv3d(in_channels, out_channels//2, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm3d(out_channels)
-        self.conv2 = nn.Conv3d(out_channels//2, out_channels, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm3d(out_channels)
         self.relu = nn.ReLU(inplace=False)
         self.conv1x1 = nn.Conv3d(in_channels, out_channels, kernel_size=1)
@@ -63,7 +60,7 @@ class Decoder(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm3d(out_channels),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
         )
 
     def forward(self, x):
@@ -71,17 +68,12 @@ class Decoder(nn.Module):
         return out
 
 
-
-
-
-
-
 class RE_Net(nn.Module):
-    # def __init__(self, classes, channels):
-    def __init__(self):
+    def __init__(self, classes, channels):
+        # def __init__(self):
 
         super(RE_Net, self).__init__()
-        self.encoder1 = ResEncoder(1, 32)
+        self.encoder1 = ResEncoder(classes, 32)
         self.encoder2 = ResEncoder(32, 64)
         self.encoder3 = ResEncoder(64, 128)
         self.bridge = ResEncoder(128, 256)
@@ -90,12 +82,9 @@ class RE_Net(nn.Module):
         self.conv2_2 = nn.Conv3d(128, 1, kernel_size=1)
         self.conv3_3 = nn.Conv3d(64, 1, kernel_size=1)
 
-
         self.convTrans1 = nn.ConvTranspose3d(1, 1, kernel_size=2, stride=2)
         self.convTrans2 = nn.ConvTranspose3d(1, 1, kernel_size=2, stride=2)
         self.convTrans3 = nn.ConvTranspose3d(1, 1, kernel_size=2, stride=2)
-
-
 
         self.decoder3 = Decoder(256, 128)
         self.decoder2 = Decoder(128, 64)
@@ -104,7 +93,7 @@ class RE_Net(nn.Module):
         self.up3 = deconv(256, 128)
         self.up2 = deconv(128, 64)
         self.up1 = deconv(64, 32)
-        self.final = nn.Conv3d(32, 1, kernel_size=1, padding=0)
+        self.final = nn.Conv3d(32, channels, kernel_size=1, padding=0)
         initialize_weights(self)
 
     def forward(self, x):
@@ -129,13 +118,10 @@ class RE_Net(nn.Module):
         x2 = x2.expand(-1, 64, -1, -1, -1).mul(enc2)
         x2 = x2 + enc2
 
-
-
         bridge = self.bridge(down3)
 
         conv1_1 = self.conv1_1(bridge)
         convTrans1 = self.convTrans1(conv1_1)
-
 
         x = -1 * (torch.sigmoid(convTrans1)) + 1
         x = x.expand(-1, 128, -1, -1, -1).mul(enc3)
@@ -156,5 +142,3 @@ class RE_Net(nn.Module):
         final = self.final(dec1)
         final = F.sigmoid(final)
         return final
-
-

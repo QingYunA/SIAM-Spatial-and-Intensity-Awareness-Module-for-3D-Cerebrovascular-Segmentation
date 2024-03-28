@@ -1,5 +1,5 @@
-name: "unet"
-network: "unet"
+name: "re_net"
+network: "re_net"
 #* Output Settings
 output_dir: './logs/${config.name}'  # checkpoint_latest save path
 save_suffix: '.mhd'  # the file format saved when training

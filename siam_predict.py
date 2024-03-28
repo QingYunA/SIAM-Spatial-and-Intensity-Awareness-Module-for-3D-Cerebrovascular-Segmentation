@@ -1,5 +1,4 @@
 import os
-import argparse
 import torch
 from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
@@ -7,13 +6,9 @@ import torchio as tio
 from torchio.transforms import (
     ZNormalization,
 )
-from tqdm import tqdm
 from utils.metric import metric
 from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, CosineAnnealingLR
-from process_input import process_x, process_gt
 import numpy as np
-from logger import create_logger
-from utils import yaml_read
 from utils.conf_base import Default_Conf
 from rich.progress import (
     BarColumn,
@@ -67,12 +62,11 @@ def predict(model, config, logger):
     model.eval()
 
     # * load datasetBs
-    from dataloader import Dataset
+    from SIAM_dataloader import SIAMDataLoader
 
-    dataset = Dataset(config).subjects  # ! notice in predict.py should use Dataset(conf).subjects
+    dataset = SIAMDataLoader(config).subjects  # ! notice in predict.py should use Dataset(conf).subjects
     znorm = ZNormalization()
 
-    # jaccard_ls, dice_ls = [], []
     precision_ls, recall_ls, dice_ls, hs95_ls = [], [], [], []
 
     file_tqdm = progress.add_task("[red]Predicting file", total=len(dataset))
@@ -82,9 +76,10 @@ def predict(model, config, logger):
     model = accelerator.prepare(model)
     # start progess
     progress.start()
+    patch_size = [int(i) for i in config.patch_size.split(",")]
     for i, item in enumerate(dataset):
         item = znorm(item)
-        grid_sampler = tio.inference.GridSampler(item, patch_size=(config.patch_size), patch_overlap=(4, 4, 36))
+        grid_sampler = tio.inference.GridSampler(item, patch_size=(patch_size), patch_overlap=(4, 4, 36))
         affine = item["source"]["affine"]
         spacing = item.spacing
         # * dist sampler
@@ -107,12 +102,13 @@ def predict(model, config, logger):
             for j, batch in enumerate(patch_loader):
                 locations = batch[tio.LOCATION]
 
-                x = process_x(config, batch)
+                x = batch["source"]["data"]
+                gt = batch["gt"]["data"]
+
                 x = x.type(torch.FloatTensor).to(accelerator.device)
-                gt = process_gt(config, batch)
                 gt = gt.type(torch.FloatTensor).to(accelerator.device)
 
-                pred = model(x)
+                pred = model(x, x, x)
 
                 mask = torch.sigmoid(pred.clone())
                 mask[mask > 0.5] = 1
@@ -132,10 +128,7 @@ def predict(model, config, logger):
             save_mhd(pred_t, affine, i, config)
 
             # * calculate metrics
-            precision, recall, dice, hs95 = metric(gt_t, pred_t, spacing=spacing)
-            # jaccard_ls.append(jaccard)
-            # dice_ls.append(dice)
-            # logger.info(f"File {i+1} metrics: " f"\njaccard: {jaccard}" f"\ndice: {dice}")
+            precision, recall, dice, hs95 = metric(gt_t, pred_t, spacing)
             precision_ls.append(precision)
             recall_ls.append(recall)
             dice_ls.append(dice)
@@ -144,6 +137,7 @@ def predict(model, config, logger):
                 f"File {i+1} metrics: " f"\nprecision: {precision}" f"\nrecall: {recall}" f"\ndice: {dice}" f"\nhs95: {hs95}"
             )
         progress.update(file_tqdm, completed=i + 1)
+
     save_csv(
         save_path=config.hydra_path,
         precision_ls=precision_ls,
@@ -161,6 +155,16 @@ def predict(model, config, logger):
         f"\ndice_mean: {dice_mean}"
         f"\nhs95_mean: {hs95_mean}"
     )
+
+
+# def save_csv(jaccard_ls, dice_ls, config):
+#     import pandas as pd
+#
+#     data = {"jaccard": jaccard_ls, "dice": dice_ls}
+#     df = pd.DataFrame(data)
+#     df.loc[len(df)] = [df.iloc[:, 0].mean(), df.iloc[:, 1].mean()]
+#     save_path = os.path.join(config.hydra_path, "metrics.csv")
+#     df.to_csv(save_path, index=False)
 
 
 def save_csv(save_path, **kwargs):
@@ -186,16 +190,6 @@ def save_mhd(pred, affine, index, config):
 @hydra.main(config_path="conf", config_name="config")
 def main(config):
     config = config["config"]
-    config.hydra_path = config.hydra_path.replace("logs", "results")
-
-    if isinstance(config.patch_size, str):
-        assert (
-            len(config.patch_size.split(",")) <= 3
-        ), f'patch size can only be one str or three str but got {len(config.patch_size.split(","))}'
-        if len(config.patch_size.split(",")) == 3:
-            config.patch_size = tuple(map(int, config.patch_size.split(",")))
-        else:
-            config.patch_size = int(config.patch_size)
 
     os.makedirs(config.hydra_path, exist_ok=True)
     if config.network == "res_unet":
@@ -203,21 +197,18 @@ def main(config):
 
         model = UNet(in_channels=config.in_classes, n_classes=config.out_classes, base_n_filter=32)
     elif config.network == "unet":
-        from models.three_d.My_Unet import UNet  # * 3d unet
+        from models.three_d.unet3d import UNet3D  # * 3d unet
 
-        model = UNet(in_channels=config.in_classes, out_channels=config.out_classes, init_features=32)
+        model = UNet3D(in_channels=config.in_classes, out_channels=config.out_classes, init_features=32)
     elif config.network == "er_net":
         from models.three_d.ER_net import ER_Net
 
         model = ER_Net(classes=config.out_classes, channels=config.in_classes)
-    elif config.network == "re_net":
-        from models.three_d.RE_net import RE_Net
+    elif config.network == "SIAMUNet":
+        from models.three_d.SIAM_Unet import SIAMUNet
 
-        model = RE_Net(classes=config.out_classes, channels=config.in_classes)
-    elif config.network == "vnet":
-        from models.three_d.vnet3d import VNet
+        model = SIAMUNet(in_channels=config.in_classes, out_channels=config.out_classes, init_features=32)
 
-        model = VNet(in_channels=config.in_classes, classes=config.out_classes)
     # * create logger
     logger = get_logger(config)
     info = "\nParameter Settings:\n"
@@ -226,9 +217,6 @@ def main(config):
     logger.info(info)
 
     predict(model, config, logger)
-    logger.info(f"tensorboard file saved in:{config.hydra_path}")
-    # TODO 取巧，通过删除文件夹的方式消除重复出现的文件夹
-    shutil.rmtree(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
 
 
 if __name__ == "__main__":
