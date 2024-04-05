@@ -2,6 +2,7 @@ import os
 import argparse
 import torch
 import time
+import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 import torch.distributed as dist
 from tqdm import tqdm
@@ -39,7 +40,9 @@ def weights_init_normal(init_type):
                 torch.nn.init.normal_(m.weight.data, 1.0, gain)
             if hasattr(m, "bias") and m.bias is not None:
                 torch.nn.init.constant_(m.bias.data, 0.0)
-        elif hasattr(m, "weight") and (classname.find("Conv") != -1 or classname.find("Linear") != -1):
+        elif hasattr(m, "weight") and (
+            classname.find("Conv") != -1 or classname.find("Linear") != -1
+        ):
             if init_type == "normal":
                 torch.nn.init.normal_(m.weight.data, 0.0, gain)
             elif init_type == "xavier":
@@ -53,7 +56,9 @@ def weights_init_normal(init_type):
             elif init_type == "none":  # uses pytorch's default init method
                 m.reset_parameters()
             else:
-                raise NotImplementedError("initialization method [%s] is not implemented" % init_type)
+                raise NotImplementedError(
+                    "initialization method [%s] is not implemented" % init_type
+                )
             if hasattr(m, "bias") and m.bias is not None:
                 torch.nn.init.constant_(m.bias.data, 0.0)
 
@@ -61,7 +66,9 @@ def weights_init_normal(init_type):
 
 
 def get_logger(config):
-    file_handler = logging.FileHandler(os.path.join(config.hydra_path, f"{config.job_name}.log"))
+    file_handler = logging.FileHandler(
+        os.path.join(config.hydra_path, f"{config.job_name}.log")
+    )
     rich_handler = RichHandler()
 
     log = logging.getLogger(__name__)
@@ -99,17 +106,25 @@ def train(config, model, logger):
     from loss_function import Binary_Loss, DiceLoss, cross_entropy_3D
 
     criterion = Binary_Loss()
+    criterion_ce = nn.CrossEntropyLoss()
     # dice_criterion = DiceLoss().cuda()
 
     # * set scheduler strategy
     if config.use_scheduler:
-        scheduler = StepLR(optimizer, step_size=config.scheduler_step_size, gamma=config.scheduler_gamma)
+        scheduler = StepLR(
+            optimizer,
+            step_size=config.scheduler_step_size,
+            gamma=config.scheduler_gamma,
+        )
 
     # * load model
     if config.load_mode == 1:  # * load weights from checkpoint
-        logger.info(f"load model from: {os.path.join(config.ckpt, config.latest_checkpoint_file)}")
+        logger.info(
+            f"load model from: {os.path.join(config.ckpt, config.latest_checkpoint_file)}"
+        )
         ckpt = torch.load(
-            os.path.join(config.ckpt, config.latest_checkpoint_file), map_location=lambda storage, loc: storage
+            os.path.join(config.ckpt, config.latest_checkpoint_file),
+            map_location=lambda storage, loc: storage,
         )
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optim"])
@@ -148,11 +163,15 @@ def train(config, model, logger):
     iteration = elapsed_epochs * len(train_loader)
 
     epoch_tqdm = progress.add_task(description="[red]epoch progress", total=epochs)
-    batch_tqdm = progress.add_task(description="[blue]batch progress", total=len(train_loader))
+    batch_tqdm = progress.add_task(
+        description="[blue]batch progress", total=len(train_loader)
+    )
 
     accelerator = Accelerator()
     # * accelerate prepare
-    train_loader, model, optimizer, scheduler = accelerator.prepare(train_loader, model, optimizer, scheduler)
+    train_loader, model, optimizer, scheduler = accelerator.prepare(
+        train_loader, model, optimizer, scheduler
+    )
 
     progress.start()
     for epoch in range(1, epochs + 1):
@@ -173,7 +192,9 @@ def train(config, model, logger):
                 optimizer.zero_grad()
 
                 x = process_x(config, batch)  # * from batch extract x:[bs,4 or 1,h,w,d]
-                gt = process_gt(config, batch)  # * from batch extract gt:[bs,4 or 1,h,w,d]
+                gt = process_gt(
+                    config, batch
+                )  # * from batch extract gt:[bs,4 or 1,h,w,d]
                 # gt_back = torch.zeros_like(gt)
                 # gt_back[gt == 0] = 1
                 # gt = torch.cat([gt_back, gt], dim=1)  # * [bs,2,h,w,d]
@@ -181,12 +202,19 @@ def train(config, model, logger):
                 x = x.type(torch.FloatTensor).to(accelerator.device)
                 gt = gt.type(torch.FloatTensor).to(accelerator.device)
 
-                pred = model(x)
+                if config.network == "is":
+                    pred_1, pred = model(x)
+                    loss = criterion_ce(pred_1, gt) + criterion_ce(pred, gt)
+
+                else:
+                    pred = model(x)
 
                 # mask = pred.argmax(dim=1, keepdim=True)  # * [bs,1,h,w,d]
 
                 # *  pred -> mask (0 or 1)
-                mask = torch.sigmoid(pred.clone())  # TODO should use softmax, because it returns two probability (sum = 1)
+                mask = torch.sigmoid(
+                    pred.clone()
+                )  # TODO should use softmax, because it returns two probability (sum = 1)
                 mask[mask > 0.5] = 1
                 mask[mask <= 0.5] = 0
 
@@ -202,7 +230,8 @@ def train(config, model, logger):
 
             # * calculate metrics
             # TODO use reduce to sum up all rank's calculation results
-            _, _, dice, _ = metric(gt.cpu(), mask.cpu())
+            # _, _, dice, _ = metric(gt.cpu(), mask.cpu())
+            dice = None
             # dice = dist.all_reduce(dice, op=dist.ReduceOp.SUM) / dist.get_world_size()
             # recall = dist.all_reduce(recall, op=dist.ReduceOp.SUM) / dist.get_world_size()
             # specificity = dist.all_reduce(specificity, op=dist.ReduceOp.SUM) / dist.get_world_size()
@@ -210,7 +239,7 @@ def train(config, model, logger):
             writer.add_scalar("Training/Loss", loss.item(), iteration)
             # writer.add_scalar('Training/recall', recall, iteration)
             # writer.add_scalar('Training/specificity', specificity, iteration)
-            writer.add_scalar("Training/dice", dice, iteration)
+            # writer.add_scalar("Training/dice", dice, iteration)
 
             temp_file_base = os.path.join(config.hydra_path, "train_temp")
             os.makedirs(temp_file_base, exist_ok=True)
@@ -235,7 +264,7 @@ def train(config, model, logger):
             #             pred_data.save(os.path.join(temp_file_base, f"epoch-{epoch:04d}-batch-{i:02d}-pred" + conf.save_arch))
             # * record metris
             loss_meter.update(loss.item(), x.size(0))
-            dice_meter.update(dice, x.size(0))
+            # dice_meter.update(dice, x.size(0))
             # recall_meter.update(recall, x.size(0))
             # spe_meter.update(specificity, x.size(0))
             train_time.update(time.time() - train_start)
@@ -244,7 +273,7 @@ def train(config, model, logger):
             logger.info(
                 f"\nEpoch: {epoch} Batch: {i}, data load time: {load_meter.val:.3f}s , train time: {train_time.val:.3f}s\n"
                 f"Loss: {loss_meter.val}\n"
-                f"Dice: {dice_meter.val}\n"
+                # f"Dice: {dice_meter.val}\n"
             )
             # f'Recall: {recall_meter.val}\n'
             # f'Specificity: {spe_meter.val}\n')
@@ -307,11 +336,19 @@ def main(config):
     if config.network == "res_unet":
         from models.three_d.residual_unet3d import UNet
 
-        model = UNet(in_channels=config.in_classes, n_classes=config.out_classes, base_n_filter=32)
+        model = UNet(
+            in_channels=config.in_classes,
+            n_classes=config.out_classes,
+            base_n_filter=32,
+        )
     elif config.network == "unet":
         from models.three_d.My_Unet import UNet  # * 3d unet
 
-        model = UNet(in_channels=config.in_classes, out_channels=config.out_classes, init_features=32)
+        model = UNet(
+            in_channels=config.in_classes,
+            out_channels=config.out_classes,
+            init_features=32,
+        )
     elif config.network == "er_net":
         from models.three_d.ER_net import ER_Net
 
@@ -324,6 +361,27 @@ def main(config):
         from models.three_d.vnet3d import VNet
 
         model = VNet(in_channels=config.in_classes, classes=config.out_classes)
+    elif config.network == "is":
+        from models.three_d.IS import UNet3D
+
+        model = UNet3D(in_channels=config.in_classes, out_channels=config.out_classes)
+    elif config.network == "csrnet":
+        from models.three_d.csrnet import CSRNet
+
+        model = CSRNet(in_channels=config.in_classes, out_channels=config.out_classes)
+
+    elif config.network == "unetr":
+        from models.three_d.unetr import UNETR
+
+        model = UNETR(
+            img_shape=config.img_shape,
+            input_dim=config.in_classes,
+            output_dim=config.out_classes,
+            embed_dim=config.embed_dim,
+            patch_size=config.unetr_patch_size,
+            num_heads=config.num_heads,
+            dropout=config.dropout,
+        )
 
     model.apply(weights_init_normal(config.init_type))
 
@@ -342,3 +400,4 @@ def main(config):
 
 if __name__ == "__main__":
     main()
+

@@ -3,17 +3,28 @@ from pathlib import Path
 import pandas as pd
 
 if __name__ == "__main__":
-    path = "./results/siam/"
+    network = "csrnet0.5"
+    path = f"./logs/{network}"
     csv_list = Path(path).glob("*/*/*.csv")
 
-    # *  find top 5 dice
-    max_dice = 0
-    max_csv = None
     for i in csv_list:
         df = pd.read_csv(i)
-        dice = max(df["dice"])
-        if dice > max_dice:
-            max_dice = dice
-            max_csv = i
+        if "dice_ls" in df.columns:
+            dice_mean = df.iloc[-1]["dice_ls"]
+        else:
+            dice_mean = df.iloc[-1]["dice"]
+        print(i.parent, dice_mean)
 
-    print(f"max_dice: {max_dice}, max_csv: {max_csv.parent}")
+    print("--------- results:")
+
+    path = f"./results/{network}"
+    csv_list = Path(path).glob("*/*/*.csv")
+    csv_list = Path(path).glob("*/*/*.csv")
+
+    for i in csv_list:
+        df = pd.read_csv(i)
+        if "dice_ls" in df.columns:
+            dice_mean = df.iloc[-1]["dice_ls"]
+        else:
+            dice_mean = df.iloc[-1]["dice"]
+        print(i.parent, dice_mean)

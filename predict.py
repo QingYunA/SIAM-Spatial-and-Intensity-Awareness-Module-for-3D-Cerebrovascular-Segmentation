@@ -32,7 +32,9 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # ! solve warning
 
 
 def get_logger(config):
-    file_handler = logging.FileHandler(os.path.join(config.hydra_path, f"{config.job_name}.log"))
+    file_handler = logging.FileHandler(
+        os.path.join(config.hydra_path, f"{config.job_name}.log")
+    )
     rich_handler = RichHandler()
 
     log = logging.getLogger(__name__)
@@ -61,15 +63,22 @@ def predict(model, config, logger):
     # * load model
     # assert type(conf.ckpt) == str, "You must specify the checkpoint path"
     assert isinstance(config.ckpt, str), "You must specify the checkpoint path"
-    logger.info(f"load model from:{os.path.join(config.ckpt, config.latest_checkpoint_file)}")
-    ckpt = torch.load(os.path.join(config.ckpt, config.latest_checkpoint_file), map_location=lambda storage, loc: storage)
+    logger.info(
+        f"load model from:{os.path.join(config.ckpt, config.latest_checkpoint_file)}"
+    )
+    ckpt = torch.load(
+        os.path.join(config.ckpt, config.latest_checkpoint_file),
+        map_location=lambda storage, loc: storage,
+    )
     model.load_state_dict(ckpt["model"])
     model.eval()
 
     # * load datasetBs
     from dataloader import Dataset
 
-    dataset = Dataset(config).subjects  # ! notice in predict.py should use Dataset(conf).subjects
+    dataset = Dataset(
+        config
+    ).subjects  # ! notice in predict.py should use Dataset(conf).subjects
     znorm = ZNormalization()
 
     # jaccard_ls, dice_ls = [], []
@@ -84,7 +93,9 @@ def predict(model, config, logger):
     progress.start()
     for i, item in enumerate(dataset):
         item = znorm(item)
-        grid_sampler = tio.inference.GridSampler(item, patch_size=(config.patch_size), patch_overlap=(4, 4, 36))
+        grid_sampler = tio.inference.GridSampler(
+            item, patch_size=(config.patch_size), patch_overlap=(4, 4, 36)
+        )
         affine = item["source"]["affine"]
         spacing = item.spacing
         # * dist sampler
@@ -93,7 +104,11 @@ def predict(model, config, logger):
         # assert conf.batch_size == 1, 'batch_size must be 1 for inference'
 
         patch_loader = torch.utils.data.DataLoader(
-            grid_sampler, batch_size=config.batch_size, shuffle=False, num_workers=0, pin_memory=True
+            grid_sampler,
+            batch_size=config.batch_size,
+            shuffle=False,
+            num_workers=0,
+            pin_memory=True,
         )
         patch_loader = accelerator.prepare(patch_loader)
         if i == 0:
@@ -112,7 +127,10 @@ def predict(model, config, logger):
                 gt = process_gt(config, batch)
                 gt = gt.type(torch.FloatTensor).to(accelerator.device)
 
-                pred = model(x)
+                if config.network == "is":
+                    pred_1, pred = model(x)
+                else:
+                    pred = model(x)
 
                 mask = torch.sigmoid(pred.clone())
                 mask[mask > 0.5] = 1
@@ -141,7 +159,11 @@ def predict(model, config, logger):
             dice_ls.append(dice)
             hs95_ls.append(hs95)
             logger.info(
-                f"File {i+1} metrics: " f"\nprecision: {precision}" f"\nrecall: {recall}" f"\ndice: {dice}" f"\nhs95: {hs95}"
+                f"File {i+1} metrics: "
+                f"\nprecision: {precision}"
+                f"\nrecall: {recall}"
+                f"\ndice: {dice}"
+                f"\nhs95: {hs95}"
             )
         progress.update(file_tqdm, completed=i + 1)
     save_csv(
@@ -201,11 +223,19 @@ def main(config):
     if config.network == "res_unet":
         from models.three_d.residual_unet3d import UNet
 
-        model = UNet(in_channels=config.in_classes, n_classes=config.out_classes, base_n_filter=32)
+        model = UNet(
+            in_channels=config.in_classes,
+            n_classes=config.out_classes,
+            base_n_filter=32,
+        )
     elif config.network == "unet":
         from models.three_d.My_Unet import UNet  # * 3d unet
 
-        model = UNet(in_channels=config.in_classes, out_channels=config.out_classes, init_features=32)
+        model = UNet(
+            in_channels=config.in_classes,
+            out_channels=config.out_classes,
+            init_features=32,
+        )
     elif config.network == "er_net":
         from models.three_d.ER_net import ER_Net
 
@@ -218,6 +248,26 @@ def main(config):
         from models.three_d.vnet3d import VNet
 
         model = VNet(in_channels=config.in_classes, classes=config.out_classes)
+    elif config.network == "is":
+        from models.three_d.IS import UNet3D
+
+        model = UNet3D(in_channels=config.in_classes, out_channels=config.out_classes)
+    elif config.network == "csrnet":
+        from models.three_d.csrnet import CSRNet
+
+        model = CSRNet(in_channels=config.in_classes, out_channels=config.out_classes)
+    elif config.network == "unetr":
+        from models.three_d.unetr import UNETR
+
+        model = UNETR(
+            img_shape=config.img_shape,
+            input_dim=config.in_classes,
+            output_dim=config.out_classes,
+            embed_dim=config.embed_dim,
+            patch_size=config.unetr_patch_size,
+            num_heads=config.num_heads,
+            dropout=config.dropout,
+        )
     # * create logger
     logger = get_logger(config)
     info = "\nParameter Settings:\n"
@@ -227,8 +277,6 @@ def main(config):
 
     predict(model, config, logger)
     logger.info(f"tensorboard file saved in:{config.hydra_path}")
-    # TODO 取巧，通过删除文件夹的方式消除重复出现的文件夹
-    shutil.rmtree(hydra.core.hydra_config.HydraConfig.get().runtime.output_dir)
 
 
 if __name__ == "__main__":

@@ -146,7 +146,7 @@ def train(config, model, logger):
 
     # * accelerate prepare
     train_loader, model, optimizer, scheduler = accelerator.prepare(train_loader, model, optimizer, scheduler)
-    dice_criterion = DiceLoss().to(accelerator.device)
+    # dice_criterion = DiceLoss().to(accelerator.device)
     bce_criterion = nn.BCEWithLogitsLoss().to(accelerator.device)
     sptial_criterion = nn.MSELoss().to(accelerator.device)
     intensity_criterion = nn.MSELoss().to(accelerator.device)
@@ -165,13 +165,19 @@ def train(config, model, logger):
         for i, batch in enumerate(train_loader):
             with torch.autograd.set_detect_anomaly(True):
                 progress.update(batch_tqdm, completed=i + 1)
-                train_start = time.time()
-                load_time = time.time() - load_start
+                # train_start = time.time()
+                # load_time = time.time() - load_start
                 optimizer.zero_grad()
 
                 x = batch["source"]["data"]
-                spatial_x = batch["spatial_source"]["data"]
-                intensity_x = batch["intensity_source"]["data"]
+                if "IAM" in config.module_list:
+                    intensity_x = batch["intensity_source"]["data"]
+                else:
+                    intensity_x = x
+                if "SAM" in config.module_list:
+                    spatial_x = batch["spatial_source"]["data"]
+                else:
+                    spatial_x = x
 
                 gt = batch["gt"]["data"]
                 siam_gt = batch["siam_gt"]["data"]
@@ -197,11 +203,16 @@ def train(config, model, logger):
                 # print(intensity_pred.shape)
                 # print(siam_gt.shape)
 
-                dice_loss = dice_criterion(pred, gt)
+                # dice_loss = dice_criterion(pred, gt)
                 bce_loss = bce_criterion(pred, gt)
-                spatial_loss = sptial_criterion(spatial_pred, siam_gt)
-                intensity_loss = intensity_criterion(intensity_pred, siam_gt)
-                loss = bce_loss + dice_loss + 0.5 * spatial_loss + 0.5 * intensity_loss
+                spatial_loss = 0
+                intensity_loss = 0
+                if "SAM" in config.module_list:
+                    spatial_loss = sptial_criterion(spatial_pred, siam_gt)
+                if "IAM" in config.module_list:
+                    intensity_loss = intensity_criterion(intensity_pred, siam_gt)
+                # loss = bce_loss + dice_loss + 0.5 * spatial_loss + 0.5 * intensity_loss
+                loss = bce_loss + 0.5 * spatial_loss + 0.5 * intensity_loss
                 accelerator.backward(loss)
                 progress.refresh()
 
@@ -213,12 +224,13 @@ def train(config, model, logger):
             # * calculate metrics
             # TODO use reduce to sum up all rank's calculation results
             # _, dice = metric(gt.cpu().argmax(dim=1, keepdim=True), mask.cpu())
-            _, _, dice, _ = metric(gt.cpu(), mask.cpu())
+            # _, _, dice, _ = metric(gt.cpu(), mask.cpu())
+            dice = None
 
             writer.add_scalar("Training/Loss", loss.item(), iteration)
             # writer.add_scalar('Training/recall', recall, iteration)
             # writer.add_scalar('Training/specificity', specificity, iteration)
-            writer.add_scalar("Training/dice", dice, iteration)
+            # writer.add_scalar("Training/dice", dice, iteration)
 
             temp_file_base = os.path.join(config.hydra_path, "train_temp")
             os.makedirs(temp_file_base, exist_ok=True)
@@ -243,17 +255,13 @@ def train(config, model, logger):
             #             pred_data.save(os.path.join(temp_file_base, f"epoch-{epoch:04d}-batch-{i:02d}-pred" + conf.save_arch))
             # * record metris
             loss_meter.update(loss.item(), x.size(0))
-            dice_meter.update(dice, x.size(0))
+            # dice_meter.update(dice, x.size(0))
             # recall_meter.update(recall, x.size(0))
             # spe_meter.update(specificity, x.size(0))
-            train_time.update(time.time() - train_start)
-            load_meter.update(load_time)
+            # train_time.update(time.time() - train_start)
+            # load_meter.update(load_time)
             # logger.info('batch used time: {:.3f} s\n'.format(batch_time.val))
-            logger.info(
-                f"\nEpoch: {epoch} Batch: {i}, data load time: {load_meter.val:.3f}s , train time: {train_time.val:.3f}s\n"
-                f"Loss: {loss_meter.val}\n"
-                f"Dice: {dice_meter.val}\n"
-            )
+            logger.info(f"\nEpoch: {epoch} Batch: {i}\n" f"Loss: {loss_meter.val}\n")
             # f'Recall: {recall_meter.val}\n'
             # f'Specificity: {spe_meter.val}\n')
 
@@ -265,11 +273,7 @@ def train(config, model, logger):
             logger.info(f"Learning rate:  {scheduler.get_last_lr()[0]}")
 
         # * one epoch logger
-        logger.info(
-            f"\nEpoch {epoch} used time:  {load_meter.sum+train_time.sum:.3f} s\n"
-            f"Loss Avg:  {loss_meter.avg}\n"
-            f"Dice Avg:  {dice_meter.avg}\n"
-        )
+        logger.info(f"\nEpoch {epoch} " f"Loss Avg:  {loss_meter.avg}\n" f"Dice Avg:  {dice_meter.avg}\n")
         # f'Recall Avg: {recall_meter.avg}\n'
         # f'Specificity Avg: {spe_meter.avg}\n')
 
@@ -324,6 +328,12 @@ def main(config):
         from models.three_d.SIAM_Unet import SIAMUNet
 
         model = SIAMUNet(in_channels=config.in_classes, out_channels=config.out_classes, init_features=32)
+    elif config.network == "SIAMBETA":
+        from models.three_d.SIAM_Unet_BETA import SIAMUNet as SIAM_BETA
+
+        model = SIAM_BETA(
+            in_channels=config.in_classes, out_channels=config.out_classes, init_features=32, module_list=config.module_list
+        )
 
     model.apply(weights_init_normal(config.init_type))
 

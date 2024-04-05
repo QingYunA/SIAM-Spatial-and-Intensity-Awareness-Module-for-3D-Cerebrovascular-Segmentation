@@ -2,6 +2,7 @@ import numpy as np
 from collections import OrderedDict
 import torch
 import torch.nn as nn
+import torch.fft as fft
 # from torchsummary import summary
 
 
@@ -28,7 +29,7 @@ class UNet3D(nn.Module):
         self.upconv4 = nn.ConvTranspose3d(
             features * 16, features * 8, kernel_size=2, stride=2
         )
-        self.decoder4 = UNet3D._block((features * 8) * 2 , features * 8, name="dec4")
+        self.decoder4 = UNet3D._block((features * 8) * 2, features * 8, name="dec4")
         self.upconv3 = nn.ConvTranspose3d(
             features * 8, features * 4, kernel_size=2, stride=2
         )
@@ -41,9 +42,6 @@ class UNet3D(nn.Module):
             features * 2, features, kernel_size=2, stride=2
         )
         self.decoder1 = UNet3D._block(features * 2, features, name="dec1")
-
-
-
 
         self.encoder1_ = UNet3D._block(in_channels, features, name="enc1")
         self.pool1_ = nn.MaxPool3d(kernel_size=2, stride=2)
@@ -59,7 +57,7 @@ class UNet3D(nn.Module):
         self.upconv4_ = nn.ConvTranspose3d(
             features * 16, features * 8, kernel_size=2, stride=2
         )
-        self.decoder4_ = UNet3D._block((features * 8) * 2 , features * 8, name="dec4")
+        self.decoder4_ = UNet3D._block((features * 8) * 2, features * 8, name="dec4")
         self.upconv3_ = nn.ConvTranspose3d(
             features * 8, features * 4, kernel_size=2, stride=2
         )
@@ -73,8 +71,7 @@ class UNet3D(nn.Module):
         )
         self.decoder1_ = UNet3D._block(features * 2, features, name="dec1")
 
-
-        self.encoder1__= UNet3D._block(in_channels, features, name="enc1")
+        self.encoder1__ = UNet3D._block(in_channels, features, name="enc1")
         self.pool1__ = nn.MaxPool3d(kernel_size=2, stride=2)
         self.encoder2__ = UNet3D._block(features, features * 2, name="enc2")
         self.pool2__ = nn.MaxPool3d(kernel_size=2, stride=2)
@@ -83,12 +80,14 @@ class UNet3D(nn.Module):
         self.encoder4__ = UNet3D._block(features * 4, features * 8, name="enc4")
         self.pool4__ = nn.MaxPool3d(kernel_size=2, stride=2)
 
-        self.bottleneck__ = UNet3D._block(features * 8, features * 16, name="bottleneck")
+        self.bottleneck__ = UNet3D._block(
+            features * 8, features * 16, name="bottleneck"
+        )
 
         self.upconv4__ = nn.ConvTranspose3d(
             features * 16, features * 8, kernel_size=2, stride=2
         )
-        self.decoder4__ = UNet3D._block((features * 8) * 2 , features * 8, name="dec4")
+        self.decoder4__ = UNet3D._block((features * 8) * 2, features * 8, name="dec4")
         self.upconv3__ = nn.ConvTranspose3d(
             features * 8, features * 4, kernel_size=2, stride=2
         )
@@ -102,8 +101,6 @@ class UNet3D(nn.Module):
         )
         self.decoder1__ = UNet3D._block(features * 2, features, name="dec1")
 
-
-
         self.conv = nn.Conv3d(
             in_channels=features, out_channels=out_channels, kernel_size=1
         )
@@ -111,7 +108,34 @@ class UNet3D(nn.Module):
             in_channels=features, out_channels=out_channels, kernel_size=1
         )
 
-    def forward(self, x, low_x, high_x):
+    def lowpass_torch(self, input, limit):
+        pass1 = torch.abs(fft.rfftfreq(input.shape[-1])) < limit
+        pass2 = torch.abs(fft.fftfreq(input.shape[-2])) < limit
+        # pass1 = torch.fft.fftshift(fft.rfftfreq(input.shape[-1])) < limit
+        # pass2 = torch.fft.fftshift(fft.fftfreq(input.shape[-2])) < limit
+        kernel = torch.outer(pass2, pass1).cuda()
+
+        fft_input = fft.rfftn(input)
+        return fft.irfftn(fft_input * kernel, s=input.shape[-3:])
+
+    def highpass_torch(self, input, limit):
+        # temp0 = input.shape[-1]
+        # tmp = fft.rfftfreq(input.shape[-1])
+
+        # temp1 = fft.fftfreq(input.shape[-2])
+
+        pass1 = torch.abs(fft.rfftfreq(input.shape[-1])) > limit
+        pass2 = torch.abs(fft.fftfreq(input.shape[-2])) > limit
+        # pass1 = torch.fft.fftshift(fft.rfftfreq(input.shape[-1])) > limit
+        # pass2 = torch.fft.fftshift(fft.fftfreq(input.shape[-2])) > limit
+        kernel = torch.outer(pass2, pass1).cuda()
+
+        fft_input = fft.rfftn(input)
+        return fft.irfftn(fft_input * kernel, s=input.shape[-3:])
+
+    def forward(self, x):
+        low_x = self.lowpass_torch(x, 0.1)
+        high_x = self.highpass_torch(x, 0.05)
         enc1 = self.encoder1(x)
         enc2 = self.encoder2(self.pool1(enc1))
         enc3 = self.encoder3(self.pool2(enc2))
@@ -202,12 +226,8 @@ class UNet3D(nn.Module):
         # dec1__ = torch.cat((dec1__, enc1__), dim=1)
         # dec1__ = self.decoder1__(dec1__)
 
-
-
-
-
         outputs1 = self.conv(dec1)
-        outputs2 = self.conv_(dec1+dec1_+dec1__)
+        outputs2 = self.conv_(dec1 + dec1_ + dec1__)
         # outputs2 = self.conv_(dec1+dec1__)  #x+ high
         # outputs2 = self.conv_(dec1+dec1_)  #x+low
 
@@ -245,5 +265,3 @@ class UNet3D(nn.Module):
                 ]
             )
         )
-
-

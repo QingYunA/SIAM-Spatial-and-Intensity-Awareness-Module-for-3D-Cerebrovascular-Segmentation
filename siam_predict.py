@@ -208,6 +208,12 @@ def main(config):
         from models.three_d.SIAM_Unet import SIAMUNet
 
         model = SIAMUNet(in_channels=config.in_classes, out_channels=config.out_classes, init_features=32)
+    elif config.network == "SIAMBETA":
+        from models.three_d.SIAM_Unet_BETA import SIAMUNet as SIAM_BETA
+
+        model = SIAM_BETA(
+            in_channels=config.in_classes, out_channels=config.out_classes, init_features=32, module_list=config.module_list
+        )
 
     # * create logger
     logger = get_logger(config)

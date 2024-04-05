@@ -40,7 +40,16 @@ def get_subjects(config):
         gt_path = Path(config.gt_path)
     x_generator = sorted(img_path.glob("*.mhd"))
     gt_generator = sorted(gt_path.glob("*.mhd"))
-    for i, (source, gt) in enumerate(zip(x_generator, gt_generator)):
+
+    ratio = config.dataset_ratio
+
+    x_list = list(x_generator)
+    gt_list = list(gt_generator)
+
+    if "train" in config.job_name:
+        x_list = x_list[: int(len(x_list) * ratio)]
+        gt_list = gt_list[: int(len(gt_list) * ratio)]
+    for i, (source, gt) in enumerate(zip(x_list, gt_list)):
         subject = tio.Subject(
             source=tio.ScalarImage(source),
             gt=tio.LabelMap(gt),
@@ -60,10 +69,16 @@ class Dataset(torch.utils.data.Dataset):
 
         self.transforms = self.transform(config)
 
-        self.training_set = tio.SubjectsDataset(self.subjects, transform=self.transforms)
+        self.training_set = tio.SubjectsDataset(
+            self.subjects, transform=self.transforms
+        )
 
         self.queue_dataset = Queue(
-            self.training_set, queue_length, samples_per_volume, UniformSampler(patch_size=config.patch_size), num_workers=16
+            self.training_set,
+            queue_length,
+            samples_per_volume,
+            UniformSampler(patch_size=config.patch_size),
+            num_workers=0,
         )
 
     def transform(self, config):

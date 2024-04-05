@@ -17,15 +17,15 @@ def metric(gt, pred, spacing=None):
     pred = preds.astype(int)  # float data does not support bit_and and bit_or
     gdth = gts.astype(int)  # float data does not support bit_and and bit_or
 
-    if spacing:
-        # pred = pred[None, ::]
-        # gdth = gdth[None, ::]
-        pred_onehot = one_hot_encode(pred)
-        gdth_onehot = one_hot_encode(gdth)
-        hs95 = compute_hausdorff_distance(pred_onehot, gdth_onehot, percentile=95).numpy()
-        hs95 = hs95[0][0]
-    else:
-        hs95 = None
+    # if spacing:
+    #     # pred = pred[None, ::]
+    #     # gdth = gdth[None, ::]
+    #     pred_onehot = one_hot_encode(pred)
+    #     gdth_onehot = one_hot_encode(gdth)
+    #     hs95 = compute_hausdorff_distance(pred_onehot, gdth_onehot, percentile=95).numpy()
+    #     hs95 = hs95[0][0]
+    # else:
+    hs95 = 0
 
     gdth = gdth.squeeze()
     pred = pred.squeeze()

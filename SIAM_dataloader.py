@@ -3,6 +3,7 @@ from torchio.transforms import (
     RandomFlip,
     RandomSwap,
     RescaleIntensity,
+    RandomNoise,
     ZNormalization,
     OneOf,
     Compose,
@@ -112,16 +113,32 @@ class SIAMDataLoader(torch.utils.data.Dataset):
 
     def transform(self, config):
         if "train" in config.job_name:
-            training_transform = Compose(
-                [
-                    # CropOrPad((hp.crop_or_pad_size), padding_mode='reflect'),
-                    # RandomAffine(degrees=20),
-                    # RandomNoise(std=0.0001),
-                    RandomSwap(patch_size=self.swap_size, num_iterations=config.swap_iterations, include="spatial_source"),
-                    ZNormalization(),
-                    # tio.transforms.RescaleIntensity(out_min_max=(0, 1)),
-                ]
-            )
+            if "SAM" in config.module_list:
+                training_transform = Compose(
+                    [
+                        # CropOrPad((hp.crop_or_pad_size), padding_mode='reflect'),
+                        # RandomAffine(degrees=20),
+                        # RandomNoise(std=0.0001, exclude=["spatial_source", "intensity_source"]),
+                        RandomSwap(
+                            patch_size=self.swap_size, num_iterations=config.swap_iterations, include="spatial_source"
+                        ),
+                        ZNormalization(),
+                        # tio.transforms.RescaleIntensity(out_min_max=(0, 1)),
+                    ]
+                )
+            else:
+                training_transform = Compose(
+                    [
+                        # CropOrPad((hp.crop_or_pad_size), padding_mode='reflect'),
+                        # RandomAffine(degrees=20),
+                        # RandomNoise(std=0.0001, exclude=["spatial_source", "intensity_source"]),
+                        # RandomSwap(
+                        #     patch_size=self.swap_size, num_iterations=config.swap_iterations, include="spatial_source"
+                        # ),
+                        ZNormalization(),
+                        # tio.transforms.RescaleIntensity(out_min_max=(0, 1)),
+                    ]
+                )
         elif "predict" in config.job_name:
             training_transform = Compose(
                 [
