@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 
 if __name__ == "__main__":
-    network = "csrnet0.5"
+    network = "siamBETA"
     path = f"./logs/{network}"
     csv_list = Path(path).glob("*/*/*.csv")
 
