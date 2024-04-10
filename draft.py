@@ -12,5 +12,9 @@ def save_csv(save_path, **kwargs):
 
 
 if __name__ == "__main__":
-    tmp_ls, tmp_ls2 = [1], [2]
-    save_csv("test", tmp_ls=tmp_ls, tmp_ls2=tmp_ls2)
+    # tmp_ls, tmp_ls2 = [1], [2]
+    # save_csv("test", tmp_ls=tmp_ls, tmp_ls2=tmp_ls2)
+
+    a = torch.randn(4, 64, 64, 64, 64)
+    encoder = torch.nn.Conv3d(in_channels=64, out_channels=256, kernel_size=3, padding=1)
+    print(encoder(a).shape)

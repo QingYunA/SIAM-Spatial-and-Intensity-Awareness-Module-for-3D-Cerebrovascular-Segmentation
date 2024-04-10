@@ -49,29 +49,15 @@ def counter(label_array):
 
 
 def rescale(data_path, save_path):
-    # data_path = "/disk/cyq/tof_data/test/source/"
-    # label_path = '/disk/cyq/tof_data/train/label1/'
     data_list = sorted(Path(data_path).glob("*.mhd"))
-    # label_list = sorted(Path(label_path).glob('*.mhd'))
-    # save_path = "/disk/cyq/tof_data/test/rescale_source/"
     os.makedirs(save_path, exist_ok=True)
     progress = create_progress()
     # for (i, label) in progress.track(zip(data_list, label_list), total=len(data_list), description='Processing Data'):
     for i in progress.track(data_list, total=len(data_list), description="Processing Data"):
         progress.start()
         image = sitk.ReadImage(i)
-        # array = sitk.GetArrayFromImage(image)
-        #
-        # label_image = sitk.ReadImage(label)
-        # label_array = sitk.GetArrayFromImage(label_image)
-        # ratio = counter(label_array)
-        #
-        # flatten_array = np.sort(array.flatten())
-        # array_len = len(flatten_array)
-        # threshold = int(flatten_array[int((1-ratio)*array_len)])
-        # rich.print('this data label ratio :', threshold)
-        #
-        # image = sitk.Threshold(image, lower=0, upper=threshold, outsideValue=0)
+        image = sitk.Cast(image, sitk.sitkUInt16)
+
         # rescale image
         rescale_filter = sitk.RescaleIntensityImageFilter()
         rescale_filter.SetOutputMaximum(255)
@@ -90,6 +76,7 @@ def create_iam(data_path, label_path, save_path):
     for i, label in progress.track(zip(data_list, label_list), total=len(data_list), description="Processing Data"):
         progress.start()
         image = sitk.ReadImage(i)
+        # image = sitk.Cast(image, sitk.sitkUInt16)
         array = sitk.GetArrayFromImage(image)
         #
         label_image = sitk.ReadImage(label)
@@ -115,17 +102,18 @@ def create_iam(data_path, label_path, save_path):
 if __name__ == "__main__":
     #
     # train source rescale
-    # data_path = "/nvme/MIDAS/train/source/"
-    # save_path = "/nvme/MIDAS/train/rescale_source/"
+    # data_path = "/nvme/PCA/train/source/"
+    # save_path = "/nvme/PCA/train/rescale_source/"
     # rescale(data_path, save_path)
-
+    #
     # test source rescale
-    # data_path = "/nvme/MIDAS/test/source/"
-    # save_path = "/nvme/MIDAS/test/rescale_source/"
+    # data_path = "/nvme/PCA/test/source/"
+    # save_path = "/nvme/PCA/test/rescale_source/"
     # rescale(data_path, save_path)
-
+    #
     # iam data produce
-    data_path = "/nvme/MIDAS/train/rescale_source/"
-    label_path = "/nvme/MIDAS/train/label/"
-    save_path = "/nvme/MIDAS/IAM_data/"
+    data_path = "/nvme/PCA/train/rescale_source/"
+    label_path = "/nvme/PCA/train/label/"
+    save_path = "/nvme/PCA/IAM_data/"
     create_iam(data_path, label_path, save_path)
+    #

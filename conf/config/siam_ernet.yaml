@@ -1,8 +1,8 @@
 swap_size: 20,20,20
 swap_iterations: 10
 extension: ".mhd"
-name: "siamBETA"
-network: "SIAMBETA"
+name: "siam_ernet"
+network: "SIAMBETA_ERNET"
 #* Output Settings
 output_dir: './logs/${config.name}'  # checkpoint_latest save path
 save_suffix: '.mhd'  # the file format saved when training
