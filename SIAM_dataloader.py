@@ -105,7 +105,7 @@ class SIAMDataLoader(torch.utils.data.Dataset):
         self.training_set = tio.SubjectsDataset(self.subjects, transform=self.transforms)
 
         self.queue_dataset = Queue(
-            self.training_set, queue_length, samples_per_volume, LabelSampler(patch_size=self.patch_size), num_workers=0
+            self.training_set, queue_length, samples_per_volume, LabelSampler(patch_size=self.patch_size), num_workers=4
         )
 
     def to_list(self, string):

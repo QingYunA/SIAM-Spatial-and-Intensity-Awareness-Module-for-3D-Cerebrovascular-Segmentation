@@ -14,17 +14,17 @@ config:
   # pred_gt_path: '/nvme/siam_data/test/label1'
   
   # midas-tof
-  # dark_path: '/nvme/MIDAS/IAM_data/'
-  # data_path: '/nvme/MIDAS/train/rescale_source'
-  # gt_path: '/nvme/MIDAS/train/label'
-  # pred_data_path: '/nvme/MIDAS/test/rescale_source'
-  # pred_gt_path: '/nvme/MIDAS/test/label'
+  dark_path: '/nvme/MIDAS/IAM_data/'
+  data_path: '/nvme/MIDAS/train/rescale_source'
+  gt_path: '/nvme/MIDAS/train/label'
+  pred_data_path: '/nvme/MIDAS/test/rescale_source'
+  pred_gt_path: '/nvme/MIDAS/test/label'
   # pc
-  dark_path: '/nvme/PCA/IAM_data/'
-  data_path: '/nvme/PCA/train/rescale_source'
-  gt_path: '/nvme/PCA/train/label'
-  pred_data_path: '/nvme/PCA/test/rescale_source'
-  pred_gt_path: '/nvme/PCA/test/label'
+  # dark_path: '/nvme/PCA/IAM_data/'
+  # data_path: '/nvme/PCA/train/rescale_source'
+  # gt_path: '/nvme/PCA/train/label'
+  # pred_data_path: '/nvme/PCA/test/rescale_source'
+  # pred_gt_path: '/nvme/PCA/test/label'
   #
   init_type: 'none'  # ['normal', 'xavier', 'xavier_uniform', 'kaiming', 'orthogonal', 'none]
   aug: False  # True or False

@@ -1,0 +1,22 @@
+swap_size: 20,20,20
+swap_iterations: 10
+extension: ".mhd"
+name: "siam_vnet"
+network: "SIAM_VNET"
+#* Output Settings
+output_dir: './logs/${config.name}'  # checkpoint_latest save path
+save_suffix: '.mhd'  # the file format saved when training
+#* Model Settings
+in_classes: 1
+out_classes: 1
+load_mode: 0  # 0: load nothing 1: load from checkpoint 2: load from pre_trained model(supervised)
+ckpt: '/disk/cyq/2023/My_Proj/SIM-Space-and-Intensity-Module-/logs/siam/siam_train-2024-03-29/22-21-21'
+# latest_checkpoint_file: 'checkpoint_0100.pt'  # ckpt + latest_checkpoint_file determined load which ckpt file
+latest_checkpoint_file: 'latest_checkpoint.pt'  # ckpt + latest_checkpoint_file determined load which ckpt file
+#* Training Settings
+crop_or_pad_size: 64, 64, 64  # if 2D: 256,256,1  #USELESS
+patch_size: 64, 64, 64  # if 2D: 128,128,1
+dataset_ratio: 1
+module_list: ["IAM","SAM"]
+
+

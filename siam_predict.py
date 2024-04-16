@@ -214,6 +214,15 @@ def main(config):
         model = SIAM_BETA(
             in_channels=config.in_classes, out_channels=config.out_classes, init_features=32, module_list=config.module_list
         )
+    elif config.network == "SIAMBETA_ERNET":
+        from models.three_d.SIAM_ernet import SIAM_ER_Net
+
+        model = SIAM_ER_Net(classes=config.out_classes, channels=config.in_classes)
+
+    elif config.network == "SIAM_CSRNET":
+        from models.three_d.siam_csrnet import SIAMCSRNet
+
+        model = SIAMCSRNet(in_channels=config.in_classes, out_channels=config.out_classes)
 
     # * create logger
     logger = get_logger(config)

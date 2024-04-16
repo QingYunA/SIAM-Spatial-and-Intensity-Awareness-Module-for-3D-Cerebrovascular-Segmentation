@@ -218,38 +218,3 @@ class SIAMVNet(nn.Module):
             out = self.convx3(out)
             out = self.decoder(out, encs)
             return out
-
-
-class VNet(nn.Module):
-    """
-    Implementations based on the Vnet paper: https://arxiv.org/abs/1606.04797
-    """
-
-    def __init__(self, elu=True, in_channels=1, classes=1):
-        super(VNet, self).__init__()
-        self.classes = classes
-        self.in_channels = in_channels
-
-        self.in_tr = InputTransition(in_channels, elu=elu)
-        self.down_tr32 = DownTransition(16, 1, elu)
-        self.down_tr64 = DownTransition(32, 2, elu)
-        self.down_tr128 = DownTransition(64, 3, elu, dropout=False)
-        self.down_tr256 = DownTransition(128, 2, elu, dropout=False)
-        self.up_tr256 = UpTransition(256, 256, 2, elu, dropout=False)
-        self.up_tr128 = UpTransition(256, 128, 2, elu, dropout=False)
-        self.up_tr64 = UpTransition(128, 64, 1, elu)
-        self.up_tr32 = UpTransition(64, 32, 1, elu)
-        self.out_tr = OutputTransition(32, classes, elu)
-
-    def forward(self, x):
-        out16 = self.in_tr(x)
-        out32 = self.down_tr32(out16)
-        out64 = self.down_tr64(out32)
-        out128 = self.down_tr128(out64)
-        out256 = self.down_tr256(out128)
-        out = self.up_tr256(out256, out128)
-        out = self.up_tr128(out, out64)
-        out = self.up_tr64(out, out32)
-        out = self.up_tr32(out, out16)
-        out = self.out_tr(out)
-        return out

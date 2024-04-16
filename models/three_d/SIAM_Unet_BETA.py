@@ -141,6 +141,7 @@ class SIAMUNet(nn.Module):
 
             return out, spatial_d_out, intensity_d_out
         else:
+            out = self.convx3(out)
             out = self.unet_decoder(out, encs)
             return out
 

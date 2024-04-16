@@ -343,6 +343,10 @@ def main(config):
         from models.three_d.siam_csrnet import SIAMCSRNet
 
         model = SIAMCSRNet(in_channels=config.in_classes, out_channels=config.out_classes)
+    elif config.network == "SIAM_VNET":
+        from models.three_d.siam_vnet import SIAMVNet
+
+        model = SIAMVNet(in_channels=config.in_classes, classes=config.out_classes)
     model.apply(weights_init_normal(config.init_type))
 
     # * create logger

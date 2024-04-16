@@ -139,20 +139,25 @@ class SIAMCSRNet(nn.Module):
 
     def forward(self, x, s_x, i_x):
         out, encs = self.encoder(x)
-        with torch.no_grad():
-            s_out, s_encs = self.encoder(s_x)
-        s_out = self.convx1(s_out)
-        s_out = self.s_decoder(s_out, s_encs)
+        if self.training:
+            with torch.no_grad():
+                s_out, s_encs = self.encoder(s_x)
+            s_out = self.convx1(s_out)
+            s_out = self.s_decoder(s_out, s_encs)
 
-        with torch.no_grad():
-            i_out, i_encs = self.encoder(i_x)
-        i_out = self.convx2(i_out)
-        i_out = self.i_decoder(i_out, i_encs)
+            with torch.no_grad():
+                i_out, i_encs = self.encoder(i_x)
+            i_out = self.convx2(i_out)
+            i_out = self.i_decoder(i_out, i_encs)
 
-        out = self.convx3(out)
-        out = self.decoder(out, encs)
+            out = self.convx3(out)
+            out = self.decoder(out, encs)
 
-        return out, s_out, i_out
+            return out, s_out, i_out
+        else:
+            out = self.convx3(out)
+            out = self.decoder(out, encs)
+            return out
 
 
 class CSRNet(nn.Module):
