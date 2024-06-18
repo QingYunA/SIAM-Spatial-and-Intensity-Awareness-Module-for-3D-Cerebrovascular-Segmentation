@@ -1,11 +1,11 @@
-# SIAM: Spatial and Intensity Awareness Module for Few-Shot 3D Cerebrovascular Segmentation
-This repository is the official implementation of the paper "SIAM: Spatial and Intensity Awareness Module for Few-Shot 3D Cerebrovascular Segmentation," submitted to ACM MM 2024.
+# SIAM: Spatial and Intensity Awareness Module for 3D Cerebrovascular Segmentation
+This repository is the official implementation of the paper "SIAM: Spatial and Intensity Awareness Module for 3D Cerebrovascular Segmentation," submitted to ACM MM 2024.
 
 ## Overview
 ![](https://s2.loli.net/2024/04/16/8bDqWxdE6wTQmo3.png)
 - We propose a novel spatial and intensity awareness module that guides the model to focus on cerebrovascular structures’ unique spatial distribution characteristics and pixel intensity features.
 - The proposed module, designed to integrate seamlessly without disrupting the backbone network, facilitates rapid deployment within existing segmentation networks.
-- Extensive experiments were conducted across datasets of diverse modalities, substantiating the efficacy of SIAM in elevating model segmentation performance across both normal and few-shot training datasets.
+- Extensive experiments were conducted across datasets of diverse modalities, substantiating the efficacy of SIAM in elevating model segmentation performance across both normal and limited training datasets.
 ## Visualization Experiment Results
 ![](https://s2.loli.net/2024/04/16/Hg5vNDeJxowKLRy.png)
 1. Visualization of segmentation comparisons on the Axial and Sagittal planes of the IXI dataset. The pixels rendered in yellow represent the vasculature. Each example is presented in two rows, depicting the prediction results from 100% and 50% of the training set, respectively. The models are arranged in the following order from left to right: Ours, U-Net, V-Net, ER-Net, CSR-Net, UNETR, and IS.
