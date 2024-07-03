@@ -1,5 +1,5 @@
 # SIAM: Spatial and Intensity Awareness Module for 3D Cerebrovascular Segmentation
-This repository is the official implementation of the paper "SIAM: Spatial and Intensity Awareness Module for 3D Cerebrovascular Segmentation," submitted to ACM MM 2024.
+This repository is the official implementation of the paper "SIAM: Spatial and Intensity Awareness Module for 3D Cerebrovascular Segmentation".
 
 ## Overview
 ![](https://s2.loli.net/2024/04/16/8bDqWxdE6wTQmo3.png)
